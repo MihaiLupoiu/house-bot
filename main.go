@@ -3,14 +3,25 @@ package main
 import (
 	"log"
 	"os"
+
+	"github.com/MihaiLupoiu/house-bot/lib/logs"
+	"github.com/MihaiLupoiu/house-bot/lib/telegram"
+	"github.com/coreos/bbolt"
 )
 
 func main() {
+
+	logs.Init("[ house-bot ]: ", true)
+
 	telegramBotID := os.Getenv("TELEGRAM_BOT_ID")
 	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
+	telegram.Init(telegramBotID, telegramChatID)
 
-	if telegramBotID == "" || telegramChatID == "" {
-		log.Println("ERROR: Missing TELEGRAM_BOT_ID or TELEGRAM_CHAT_ID environment variables")
-		os.Exit(1)
+	db, err := bolt.Open("data.db", 0644, bolt.DefaultOptions)
+	if err != nil {
+		log.Println(err)
+		return
 	}
+	defer db.Close()
+
 }
