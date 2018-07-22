@@ -222,6 +222,14 @@ var (
 	webURL = "https://www.fotocasa.es"
 )
 
+func getConfig() {
+
+}
+
+func setConfig() {
+
+}
+
 func getCityLocation(query string) (Location, error) {
 	var l Location
 	searchQuery := apiURL + "SearchUrl?latitude=0&longitude=0&text=" + query + "&culture=es-ES"
