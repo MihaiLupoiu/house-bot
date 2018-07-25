@@ -1,11 +1,13 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
-	"os"
 
-	"github.com/MihaiLupoiu/house-bot/lib/telegram"
 	"github.com/MihaiLupoiu/house-bot/lib/util"
+	"github.com/MihaiLupoiu/house-bot/providers"
+
 	"github.com/coreos/bbolt"
 )
 
@@ -13,17 +15,27 @@ func main() {
 
 	util.InitLog("[ house-bot ]: ", true)
 
-	// TODO: Get from configurtation TELEGRAM_BOT_ID and TELEGRAM_CHAT_ID
-	telegramBotID := os.Getenv("TELEGRAM_BOT_ID")
-	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
-	telegram.Init(telegramBotID, telegramChatID)
+	// GET conffigration
+	configFilePath := flag.String("configFile", "./config/config.json", "JSON config file to read.")
+	flag.Parse()
 
-	//TODO: Get from configuration db name
-	db, err := bolt.Open("data.db", 0644, bolt.DefaultOptions)
+	config := util.GetConfigurationFile(*configFilePath)
+
+	fmt.Println(config)
+
+	// telegram.Init(config.Telegram.BotID, config.Telegram.ChannelID)
+
+	db, err := bolt.Open(config.Database, 0644, bolt.DefaultOptions)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-
 	defer db.Close()
+
+	//	location, _ := fotocasa.GetCityLocation("castellon")
+	//	locDet, _ := fotocasa.GetCombinedLocationIds(location)
+	//	fotocasa.GetHouses(locDet, 1)
+
+	fotocasa.TickerCheck(db)
+
 }

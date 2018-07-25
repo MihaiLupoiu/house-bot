@@ -1,11 +1,14 @@
 package util
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"log/syslog"
 	"net/http"
 	"os"
+
+	"github.com/MihaiLupoiu/house-bot/models"
 )
 
 // InitLog level to print in syslog
@@ -31,4 +34,20 @@ func Get(url string) ([]byte, error) {
 	defer resp.Body.Close()
 	kk, err := ioutil.ReadAll(resp.Body)
 	return kk, err
+}
+
+// GetConfigurationFile parshe json configuration file.
+func GetConfigurationFile(configFile string) models.Config {
+	configuration := models.Config{}
+	file, err := os.Open(configFile)
+	if err != nil {
+		log.Println("error:", err)
+	} else {
+		decoder := json.NewDecoder(file)
+		err := decoder.Decode(&configuration)
+		if err != nil {
+			log.Println("error:", err)
+		}
+	}
+	return configuration
 }

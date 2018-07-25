@@ -1,5 +1,40 @@
 package models
 
+type Telegram struct {
+	BotID     string
+	ChannelID string
+}
+type Filters struct {
+	LocationName     string
+	MaximumPrice     int
+	MinimumPrice     int
+	MaximumRooms     int
+	MinimumRooms     int
+	MinimumBathrooms int
+	MinimumPhotos    int
+}
+type Fotocasa struct {
+	TransactionType     string
+	SortType            string
+	CombinedLocationIds string
+	Latitude            float64
+	Longitude           float64
+}
+type Config struct {
+	Telegram Telegram
+	Database string
+	Filters  Filters
+	Fotocasa Fotocasa
+}
+
+// transactionType:
+// Comprar 1
+// Alquiler 5
+
+// sortType
+// bumpdate
+// publicationDate
+
 // Flat description
 type Flat struct {
 	Title       string
