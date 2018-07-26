@@ -14,11 +14,12 @@ type Filters struct {
 	MinimumPhotos    int
 }
 type Fotocasa struct {
-	TransactionType     string
-	SortType            string
-	CombinedLocationIds string
-	Latitude            float64
-	Longitude           float64
+	TransactionType      string
+	SortType             string
+	CombinedLocationIds  string
+	Latitude             float64
+	Longitude            float64
+	MinutesCheckInterval int
 }
 type Config struct {
 	Telegram Telegram
@@ -35,8 +36,8 @@ type Config struct {
 // bumpdate
 // publicationDate
 
-// Flat description
-type Flat struct {
+// House description
+type House struct {
 	Title       string
 	Description string
 	Address     string

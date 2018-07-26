@@ -18,6 +18,7 @@
       "CombinedLocationIds": "724,9,8,232,376,8019,0,0,0",
       "Latitude": 41.3854,
       "Longitude": 2.1775,
-      "SortType": "bumpdate"
+      "SortType": "bumpdate",
+      "MinutesCheckInterval": 30 
     }
   }

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
-	"fmt"
 	"log"
 
+	"github.com/MihaiLupoiu/house-bot/lib/telegram"
 	"github.com/MihaiLupoiu/house-bot/lib/util"
+	"github.com/MihaiLupoiu/house-bot/models"
 	"github.com/MihaiLupoiu/house-bot/providers"
 
 	"github.com/coreos/bbolt"
@@ -15,16 +17,12 @@ func main() {
 
 	util.InitLog("[ house-bot ]: ", true)
 
-	// GET conffigration
-	configFilePath := flag.String("configFile", "./config/config.json", "JSON config file to read.")
+	// GET configuration
+	configFilePath := flag.String("configFile", "./config.json", "JSON config file to read.")
 	flag.Parse()
-
 	config := util.GetConfigurationFile(*configFilePath)
 
-	fmt.Println(config)
-
-	// telegram.Init(config.Telegram.BotID, config.Telegram.ChannelID)
-
+	// initialize Database
 	db, err := bolt.Open(config.Database, 0644, bolt.DefaultOptions)
 	if err != nil {
 		log.Println(err)
@@ -32,10 +30,14 @@ func main() {
 	}
 	defer db.Close()
 
-	//	location, _ := fotocasa.GetCityLocation("castellon")
-	//	locDet, _ := fotocasa.GetCombinedLocationIds(location)
-	//	fotocasa.GetHouses(locDet, 1)
+	// Create acommunication Channel
+	houseChan := make(chan *models.House, 1000)
+	ctx, ctxCancel := context.WithCancel(context.Background())
 
-	fotocasa.TickerCheck(db)
+	fotocasa.Init(db, houseChan, config.Fotocasa, config.Filters)
+	//go fotocasa.TickerCheck(ctx, ctxCancel)
+
+	telegram.Init(config.Telegram, houseChan)
+	telegram.RunBot(ctx, ctxCancel)
 
 }

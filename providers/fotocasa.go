@@ -1,6 +1,7 @@
 package fotocasa
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -45,12 +46,16 @@ type Address struct {
 	Coordinates models.Coordinates `js:"-" json:"coordinates"`
 }
 
+type HouseDetail struct {
+	ES string `js:"-" json:"es"`
+}
+
 type FotocasaHouse struct {
 	ID            int64                  `js:"-" json:"id"`
 	New           bool                   `js:"-" json:"isNew"`
 	Premium       bool                   `js:"-" json:"isPremium"`
 	Advertiser    map[string]interface{} `js:"-" json:"advertiser"`
-	Detail        map[string]interface{} `js:"-" json:"detail"`
+	Detail        HouseDetail            `js:"-" json:"detail"`
 	Multimedias   []interface{}          `js:"-" json:"multimedias"`
 	Features      []interface{}          `js:"-" json:"features"`
 	OtherFeatures []interface{}          `js:"-" json:"otherFeatures"`
@@ -67,13 +72,80 @@ type FotocasaHouses struct {
 }
 
 var (
-	apiURL = "https://api.fotocasa.es/PropertySearch/"
-	webURL = "https://www.fotocasa.es"
+	apiURL    = "https://api.fotocasa.es/PropertySearch/"
+	webURL    = "https://www.fotocasa.es"
+	db        *bolt.DB
+	config    models.Fotocasa
+	filters   models.Filters
+	HouseChan chan *models.House
+
+	// FotocasaLocas
+	transactionTypeId = 1 // buy by default
+	locSegments       LocationSegments
 )
 
-func GetCityLocation(query string) (Location, error) {
+// Init Fotocasa
+func Init(database *bolt.DB, communicationChannel chan *models.House, configuration models.Fotocasa, searchFilters models.Filters) {
+	db = database
+	HouseChan = communicationChannel
+	config = configuration
+	filters = searchFilters
+
+	err := db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("fotocasa"))
+		return err
+	})
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	switch config.TransactionType {
+	case "Buy":
+		transactionTypeId = 2
+	case "Rent":
+		transactionTypeId = 5
+	default:
+		// Buy
+		transactionTypeId = 1
+	}
+
+	if config.SortType != "bumpdate" && config.SortType != "publicationDate" {
+		log.Println("Invalid Fotocasa.ShortType, changed to default 'bumpdate'.")
+		config.SortType = "bumpdate"
+	}
+
+	if config.CombinedLocationIds != "" && config.Latitude != 0 && config.Longitude != 0 {
+		locSegments.IDs = config.CombinedLocationIds
+		locSegments.Coordinates = models.Coordinates{
+			Accuracy:  1,
+			Latitude:  config.Latitude,
+			Longitude: config.Longitude,
+		}
+		log.Printf("Found valid config for Fotocasa.combinedLocationID. Values: %v\n", locSegments)
+	} else {
+
+		if filters.LocationName == "" {
+			filters.LocationName = "Castellon"
+		}
+		location, err := getCityLocation(filters.LocationName)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		locSegments, err = getCombinedLocationIds(location)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		log.Printf("Got Fotocasa.combinedLocationID from '%s' Values: %v\n", filters.LocationName, locSegments)
+	}
+
+}
+
+func getCityLocation(query string) (Location, error) {
 	var l Location
 	searchQuery := apiURL + "SearchUrl?latitude=0&longitude=0&text=" + query + "&culture=es-ES"
+
 	body, err := util.Get(searchQuery)
 	if err != nil {
 		log.Println("error:", err)
@@ -82,13 +154,13 @@ func GetCityLocation(query string) (Location, error) {
 
 	err = json.Unmarshal(body, &l)
 	if err != nil {
-		fmt.Printf("error: %s: %s", err, body)
+		log.Printf("error: %s: %s", err, body)
 		return l, err
 	}
 	return l, nil
 }
 
-func GetCombinedLocationIds(location Location) (LocationSegments, error) {
+func getCombinedLocationIds(location Location) (LocationSegments, error) {
 	var ls LocationSegments
 
 	searchQuery := apiURL + "UrlLocationSegments?location=" + location.Location + "&zone=" + location.Zone
@@ -100,13 +172,34 @@ func GetCombinedLocationIds(location Location) (LocationSegments, error) {
 
 	err = json.Unmarshal(body, &ls)
 	if err != nil {
-		fmt.Printf("error: %s: %s", err, body)
+		log.Printf("error: %s: %s", err, body)
 		return ls, err
 	}
 	return ls, nil
 }
 
-func GetHouses(ls LocationSegments, page int) []FotocasaHouse {
+func getCityDetailsFromCoordinates(coord models.Coordinates) interface{} {
+	var repl interface{}
+	searchQuery := "https://reverse.geocoder.cit.api.here.com/6.2/reversegeocode.json?prox="
+	searchQuery += strconv.FormatFloat(coord.Latitude, 'f', -1, 64)
+	searchQuery += "%2C" + strconv.FormatFloat(coord.Longitude, 'f', -1, 64)
+	searchQuery += "&mode=retrieveAddresses&maxresults=1&gen=8&app_id=DemoAppId01082013GAL&app_code=AJKnXv84fjrb0KIHawS0Tg"
+
+	body, err := util.Get(searchQuery)
+	if err != nil {
+		log.Println("error:", err)
+		return repl
+	}
+
+	err = json.Unmarshal(body, &repl)
+	if err != nil {
+		log.Printf("error: %s: %s", err, body)
+		return repl
+	}
+	return repl
+}
+
+func getHouses(ls LocationSegments, page int) []FotocasaHouse {
 	var h FotocasaHouses
 	searchQuery := apiURL + "Search?"
 	searchQuery += "combinedLocationIds=" + ls.IDs
@@ -119,16 +212,8 @@ func GetHouses(ls LocationSegments, page int) []FotocasaHouse {
 	searchQuery += "&pageNumber=" + strconv.Itoa(page)
 	searchQuery += "&propertyTypeId=2"
 	searchQuery += "&sortOrderDesc=true"
-	searchQuery += "&sortType=bumpdate"
-	searchQuery += "&transactionTypeId=1"
-
-	// transactionTypeId:
-	// Comprar 1
-	// Alquiler 5
-
-	// sortType
-	// bumpdate
-	// publicationDate
+	searchQuery += "&sortType=" + config.SortType
+	searchQuery += "&transactionTypeId=" + strconv.Itoa(transactionTypeId)
 
 	body, err := util.Get(searchQuery)
 	if err != nil {
@@ -137,7 +222,7 @@ func GetHouses(ls LocationSegments, page int) []FotocasaHouse {
 
 	err = json.Unmarshal(body, &h)
 	if err != nil {
-		fmt.Printf("error: %s: %s", err, body)
+		log.Printf("error: %s: %s", err, body)
 	}
 
 	/*
@@ -152,21 +237,18 @@ func GetHouses(ls LocationSegments, page int) []FotocasaHouse {
 }
 
 func getAllHouses(ls LocationSegments) []FotocasaHouse {
-
 	var houses []FotocasaHouse
-
 	page := 1
 	for {
-		recvHouses := GetHouses(ls, page)
+		recvHouses := getHouses(ls, page)
 		if len(recvHouses) > 0 {
 			houses = append(houses, recvHouses...)
 			page++
-			fmt.Println(page)
 		} else {
 			break
 		}
 
-		if page == 5 {
+		if page == 2 {
 			break
 		}
 	}
@@ -174,33 +256,21 @@ func getAllHouses(ls LocationSegments) []FotocasaHouse {
 
 }
 
-func TickerCheck(db *bolt.DB) {
+// TickerCheck ...
+func TickerCheck(ctx context.Context, ctxCancel context.CancelFunc) {
+	defer ctxCancel()
 
-	err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("fotocasa"))
-		return err
-	})
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	//interval := time.Minute * 30
-	//interval := time.Second * 5 //DEBUG
+	//interval := time.Minute * config.MinutesCheckInterval
 	t := time.NewTimer(time.Second)
 	for {
 		select {
-		/*
-			case <-ctx.Done():
-				return
-		*/
+		case <-ctx.Done():
+			return
+
 		case <-t.C:
 
-			location, _ := GetCityLocation("castellon")
-			locDet, _ := GetCombinedLocationIds(location)
-
 			// TODO: If skip > 100 stop going in more pages
-			houses := getAllHouses(locDet)
+			houses := getAllHouses(locSegments)
 
 			skipped := 0
 			for _, house := range houses {
@@ -216,8 +286,8 @@ func TickerCheck(db *bolt.DB) {
 					}
 
 					var h FotocasaHouse
-					if err = json.Unmarshal(v, &h); err != nil {
-						fmt.Printf("error: %s: %s", err, v)
+					if err := json.Unmarshal(v, &h); err != nil {
+						log.Printf("error: %s: %s", err, v)
 					}
 
 					//fmt.Println("FOUND ->", h.ID, "Adress:", h.Address, "Transaction:", h.Transactions)
@@ -230,10 +300,11 @@ func TickerCheck(db *bolt.DB) {
 					return nil
 				})
 				if err != nil {
-					fmt.Println("Skipped: ", err)
 					skipped++
 					continue
 				}
+
+				// PROCESS HOUSE
 
 				err = db.Update(func(tx *bolt.Tx) error {
 					b := tx.Bucket([]byte("fotocasa"))
@@ -249,6 +320,12 @@ func TickerCheck(db *bolt.DB) {
 				})
 				if err != nil {
 					continue
+				}
+
+				HouseChan <- &models.House{
+					Title: "New House or Changed of Price",
+					Price: int(house.Transactions[0].Value[0]),
+					URL:   fmt.Sprintf("https://www.fotocasa.es%s", house.Detail.ES),
 				}
 
 			}
