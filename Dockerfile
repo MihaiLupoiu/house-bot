@@ -1,18 +1,21 @@
-FROM alpine:latest
+FROM myhay/builder:1.10-alpine as builder
 MAINTAINER Mihai Lupoiu <mihai.alexandru.lupoiu@gmail.com>
 
-ENV TELEGRAM_CHAT_ID=@telegram-chat-id
-ENV TELEGRAM_BOT_ID=@telegram-bot-id
 
-RUN apk --no-cache add ca-certificates && update-ca-certificates
+# Copy the code from the host and compile it
+WORKDIR $GOPATH/src/github.com/MihaiLupoiu/house-bot
+COPY . ./
+RUN dep ensure
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix nocgo -o /house-bot .
 
-COPY house-bot /bin/house-bot
-RUN chmod +x /bin/house-bot
+FROM alpine:latest
+RUN apk update && apk upgrade
+RUN apk add --no-cache ca-certificates netcat-openbsd
 
-# COPY cron /var/spool/cron/crontabs/root
+COPY --from=builder /house-bot ./
+RUN chmod +x /house-bot
 
+COPY config.json /config.json
+COPY houses.db /houses.db
 
-# CMD crond -l 2 -f
-
-#For deploying only the image.
-#FROM myhay/packt-free-learning:1
+ENTRYPOINT ["./house-bot"]
