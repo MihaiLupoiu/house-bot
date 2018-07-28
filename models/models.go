@@ -28,14 +28,6 @@ type Config struct {
 	Fotocasa Fotocasa
 }
 
-// transactionType:
-// Comprar 1
-// Alquiler 5
-
-// sortType
-// bumpdate
-// publicationDate
-
 // House description
 type House struct {
 	Title       string
@@ -44,6 +36,7 @@ type House struct {
 	Email       string
 	Phone       string
 	Price       int
+	Reduced     int
 	URL         string
 	Picture     string
 	Surface     int

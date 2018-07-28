@@ -26,7 +26,7 @@ func InitLog(tag string, debug bool) {
 
 // Get body from URL
 func Get(url string) ([]byte, error) {
-	// TODO: Parshe URLS and use net/url to create them properlly.
+	// TODO: Parshe URLS and use net/url to create them properlly. (Space %20)
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err

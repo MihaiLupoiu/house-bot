@@ -50,6 +50,11 @@ type HouseDetail struct {
 	ES string `js:"-" json:"es"`
 }
 
+type Features struct {
+	Key   string `js:"-" json:"key"`
+	Value []int  `js:"-" json:"value"`
+}
+
 type FotocasaHouse struct {
 	ID            int64                  `js:"-" json:"id"`
 	New           bool                   `js:"-" json:"isNew"`
@@ -57,7 +62,7 @@ type FotocasaHouse struct {
 	Advertiser    map[string]interface{} `js:"-" json:"advertiser"`
 	Detail        HouseDetail            `js:"-" json:"detail"`
 	Multimedias   []interface{}          `js:"-" json:"multimedias"`
-	Features      []interface{}          `js:"-" json:"features"`
+	Features      []Features             `js:"-" json:"features"`
 	OtherFeatures []interface{}          `js:"-" json:"otherFeatures"`
 	Transactions  []Transactions         `js:"-" json:"transactions"`
 	Products      []interface{}          `js:"-" json:"products"`
@@ -114,6 +119,7 @@ func Init(database *bolt.DB, communicationChannel chan *models.House, configurat
 		config.SortType = "bumpdate"
 	}
 
+	// TODO: Fix. Sometimes only CombinedLocationIds is necesarry. Latidute and Longitude not always.
 	if config.CombinedLocationIds != "" && config.Latitude != 0 && config.Longitude != 0 {
 		locSegments.IDs = config.CombinedLocationIds
 		locSegments.Coordinates = models.Coordinates{
@@ -225,14 +231,6 @@ func getHouses(ls LocationSegments, page int) []FotocasaHouse {
 		log.Printf("error: %s: %s", err, body)
 	}
 
-	/*
-		for i, v := range h.Houses {
-			fmt.Printf("-->> %d %v %v\n", i, v.ID, v.Address)
-		}
-
-	*/
-
-	// fmt.Printf("-->> %v\n", h.Houses[0])
 	return h.Houses
 }
 
@@ -247,20 +245,80 @@ func getAllHouses(ls LocationSegments) []FotocasaHouse {
 		} else {
 			break
 		}
-
-		if page == 2 {
-			break
-		}
 	}
 	return houses
 
+}
+
+func processNewHouse(house FotocasaHouse) error {
+	return processHouse(house, "new")
+}
+
+func processHouseNewPrice(house FotocasaHouse) error {
+	return processHouse(house, "changed")
+}
+
+func processHouse(house FotocasaHouse, stastus string) error {
+	houseID := strconv.FormatInt(house.ID, 10)
+	err := db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("fotocasa"))
+		encoded, err := json.Marshal(house)
+		if err != nil {
+			return err
+		}
+
+		b.Put([]byte(houseID), encoded)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	addr := house.Address.Location["level5"] + " " + house.Address.Location["level6"] + " " + house.Address.Location["level7"] + " " + house.Address.Location["level8"]
+
+	surface, rooms, bathrooms := -1, -1, -1
+	for _, feature := range house.Features {
+		switch feature.Key {
+		case "rooms":
+			rooms = feature.Value[0]
+		case "bathrooms":
+			bathrooms = feature.Value[0]
+		case "surface":
+			surface = feature.Value[0]
+		default:
+			log.Printf("Unkown features %v\n", feature)
+		}
+	}
+
+	var title string
+	if stastus == "new" {
+		title = "New House ID:"
+	} else {
+		title = "Changed House Price House ID:"
+	}
+
+	//TODO: add pictures
+	HouseChan <- &models.House{
+		Title:       title + houseID,
+		Price:       int(house.Transactions[0].Value[0]),
+		Reduced:     int(house.Transactions[0].Reduced),
+		URL:         fmt.Sprintf("https://www.fotocasa.es%s", house.Detail.ES),
+		Description: house.Description,
+		Address:     addr,
+		Surface:     surface,
+		Rooms:       rooms,
+		Bathrooms:   bathrooms,
+		// Picture:
+	}
+
+	return nil
 }
 
 // TickerCheck ...
 func TickerCheck(ctx context.Context, ctxCancel context.CancelFunc) {
 	defer ctxCancel()
 
-	//interval := time.Minute * config.MinutesCheckInterval
+	interval := time.Minute * time.Duration(config.MinutesCheckInterval)
 	t := time.NewTimer(time.Second)
 	for {
 		select {
@@ -268,72 +326,64 @@ func TickerCheck(ctx context.Context, ctxCancel context.CancelFunc) {
 			return
 
 		case <-t.C:
-
-			// TODO: If skip > 100 stop going in more pages
-			houses := getAllHouses(locSegments)
-
+			log.Println("Time to search!")
 			skipped := 0
-			for _, house := range houses {
+			page := 1
+			for {
+				houses := getHouses(locSegments, page)
+				if len(houses) > 0 {
+					// Check if house already in db or price changed.
+					for _, house := range houses {
+						houseID := strconv.FormatInt(house.ID, 10)
 
-				houseID := strconv.FormatInt(house.ID, 10)
+						err := db.View(func(tx *bolt.Tx) error {
+							b := tx.Bucket([]byte("fotocasa"))
+							v := b.Get([]byte(houseID))
+							if v == nil {
+								log.Println("house id:" + houseID + " dosn't exists")
+								return nil
+							}
 
-				err := db.View(func(tx *bolt.Tx) error {
-					b := tx.Bucket([]byte("fotocasa"))
-					v := b.Get([]byte(houseID))
-					if v == nil {
-						log.Println("flat dosn't exists")
-						return nil
+							var h FotocasaHouse
+							if err := json.Unmarshal(v, &h); err != nil {
+								log.Printf("error: %s: %s\n", err, v)
+							}
+
+							// Cheking if price changed
+							if house.Transactions[0].Value[0] == h.Transactions[0].Value[0] {
+								return errors.New("house exists")
+							} else {
+								log.Printf("House price changed!!!!!!\n")
+								return errors.New("price changed")
+							}
+						})
+						if err != nil {
+							if err == errors.New("price changed") {
+								processHouseNewPrice(house)
+							} else {
+								skipped++
+							}
+							continue
+						}
+						processNewHouse(house)
 					}
-
-					var h FotocasaHouse
-					if err := json.Unmarshal(v, &h); err != nil {
-						log.Printf("error: %s: %s", err, v)
-					}
-
-					//fmt.Println("FOUND ->", h.ID, "Adress:", h.Address, "Transaction:", h.Transactions)
-					//fmt.Println("COMRD ->", house.ID, "Adress:", house.Address, "Transaction:", house.Transactions)
-					// Cheking if price changed
-					if house.Transactions[0].Value[0] == h.Transactions[0].Value[0] {
-						return errors.New("flat exists")
-					}
-
-					return nil
-				})
-				if err != nil {
-					skipped++
-					continue
+				} else {
+					// end of list
+					break
 				}
 
-				// PROCESS HOUSE
-
-				err = db.Update(func(tx *bolt.Tx) error {
-					b := tx.Bucket([]byte("fotocasa"))
-
-					//fmt.Println("ADDING->", house.ID, "Adress:", house.Address, "Transaction:", house.Transactions)
-					encoded, err := json.Marshal(house)
-					if err != nil {
-						return err
-					}
-
-					b.Put([]byte(houseID), encoded)
-					return nil
-				})
-				if err != nil {
-					continue
+				if skipped > 50 {
+					// If skipped 50 houses stop searching. No more new houses.
+					break
 				}
 
-				HouseChan <- &models.House{
-					Title: "New House or Changed of Price",
-					Price: int(house.Transactions[0].Value[0]),
-					URL:   fmt.Sprintf("https://www.fotocasa.es%s", house.Detail.ES),
-				}
-
+				page++
 			}
 
 			if skipped > 0 {
 				log.Printf("%d fotocasas skipped\n", skipped)
 			}
-			//t.Reset(interval)
+			t.Reset(interval)
 		}
 	}
 

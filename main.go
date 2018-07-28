@@ -35,7 +35,7 @@ func main() {
 	ctx, ctxCancel := context.WithCancel(context.Background())
 
 	fotocasa.Init(db, houseChan, config.Fotocasa, config.Filters)
-	//go fotocasa.TickerCheck(ctx, ctxCancel)
+	go fotocasa.TickerCheck(ctx, ctxCancel)
 
 	telegram.Init(config.Telegram, houseChan)
 	telegram.RunBot(ctx, ctxCancel)
