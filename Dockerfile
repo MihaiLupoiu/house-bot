@@ -15,7 +15,7 @@ RUN apk add --no-cache ca-certificates netcat-openbsd
 COPY --from=builder /house-bot ./
 RUN chmod +x /house-bot
 
-COPY config.json /config.json
-COPY houses.db /houses.db
+# RUN touch /config.json
+# RUN touch /houses.db
 
 ENTRYPOINT ["./house-bot"]

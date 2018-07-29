@@ -1,20 +1,23 @@
 {
-    "telegram": {
+    "Debug":true,
+    "Telegram": {
         "BotID": "YOUR-BOT-ID",
-        "ChannelID": "YOUR-CHANNEL-ID"
+        "ChannelID": "YOUR-CHANNEL-ID",
+        "SendMessages":true
     },
     "Database": "houses.db",
     "Filters": {
         "LocationName": "Castellon",
         "Maximum_price": 430,
         "Minimum_price": 250,
+        "Maximum_sueface":0,
+        "Minimum_surface":0,
         "Maximum_rooms": 4,
         "Minimum_rooms": 2,
-        "Minimum_bathrooms": 1,
-        "Minimum_photos": 2
+        "Minimum_bathrooms": 1
     },
-    "fotocasa": {
-      "TransactionType": "buy",
+    "Fotocasa": {
+      "TransactionType": "rent",
       "CombinedLocationIds": "724,9,8,232,376,8019,0,0,0",
       "Latitude": 41.3854,
       "Longitude": 2.1775,

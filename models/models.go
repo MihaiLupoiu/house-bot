@@ -1,17 +1,19 @@
 package models
 
 type Telegram struct {
-	BotID     string
-	ChannelID string
+	BotID        string
+	ChannelID    string
+	SendMessages bool
 }
 type Filters struct {
-	LocationName     string
-	MaximumPrice     int
-	MinimumPrice     int
-	MaximumRooms     int
-	MinimumRooms     int
-	MinimumBathrooms int
-	MinimumPhotos    int
+	LocationName     string `js:"-" json:"LocationName"`
+	MaximumPrice     int    `js:"-" json:"Maximum_price"`
+	MinimumPrice     int    `js:"-" json:"Minimum_price"`
+	MaximumSurface   int    `js:"-" json:"Maximum_sueface"`
+	MinimumSurface   int    `js:"-" json:"Minimum_surface"`
+	MaximumRooms     int    `js:"-" json:"Maximum_rooms"`
+	MinimumRooms     int    `js:"-" json:"Minimum_rooms"`
+	MinimumBathrooms int    `js:"-" json:"Minimum_bathrooms"`
 }
 type Fotocasa struct {
 	TransactionType      string
@@ -22,6 +24,7 @@ type Fotocasa struct {
 	MinutesCheckInterval int
 }
 type Config struct {
+	Debug    bool
 	Telegram Telegram
 	Database string
 	Filters  Filters

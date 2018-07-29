@@ -13,10 +13,11 @@ import (
 )
 
 var (
-	BotID     string
-	ChannelID int64
-	HouseChan chan *models.House
-	AC        = accounting.Accounting{Symbol: "€", Precision: 0}
+	BotID        string
+	ChannelID    int64
+	HouseChan    chan *models.House
+	SendMessages bool
+	AC           = accounting.Accounting{Symbol: "€", Precision: 0}
 )
 
 // Init
@@ -28,6 +29,7 @@ func Init(config models.Telegram, communicationChannel chan *models.House) {
 	BotID = config.BotID
 	ChannelID, _ = strconv.ParseInt(config.ChannelID, 10, 64)
 	HouseChan = communicationChannel
+	SendMessages = config.SendMessages
 }
 
 func RunBot(ctx context.Context, ctxCancel context.CancelFunc) {
@@ -57,13 +59,14 @@ func RunBot(ctx context.Context, ctxCancel context.CancelFunc) {
 
 			txt += fmt.Sprintf("📍 Adress: %s\n", house.Address)
 			txt += fmt.Sprintf("👉  URL: %s\n", house.URL)
-			//txt += fmt.Sprintf("Description: %s\n", house.Description)
 
-			//log.Printf("\n%s\n", txt)
-
-			msg := tgbotapi.NewMessage(ChannelID, txt)
-			msg.DisableWebPagePreview = true
-			bot.Send(msg)
+			if SendMessages == true {
+				msg := tgbotapi.NewMessage(ChannelID, txt)
+				msg.DisableWebPagePreview = true
+				bot.Send(msg)
+			} else {
+				log.Printf("\n%s\n", txt)
+			}
 
 			count++
 

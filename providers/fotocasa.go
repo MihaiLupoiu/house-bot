@@ -274,7 +274,8 @@ func processHouse(house FotocasaHouse, stastus string) error {
 		return err
 	}
 
-	addr := house.Address.Location["level5"] + " " + house.Address.Location["level6"] + " " + house.Address.Location["level7"] + " " + house.Address.Location["level8"]
+	addr := house.Address.Location["level5"] + " " + house.Address.Location["level6"] + " "
+	addr += house.Address.Location["level7"] + " " + house.Address.Location["level8"]
 
 	surface, rooms, bathrooms := -1, -1, -1
 	for _, feature := range house.Features {
@@ -298,7 +299,7 @@ func processHouse(house FotocasaHouse, stastus string) error {
 	}
 
 	//TODO: add pictures
-	HouseChan <- &models.House{
+	tmpHouse := models.House{
 		Title:       title + houseID,
 		Price:       int(house.Transactions[0].Value[0]),
 		Reduced:     int(house.Transactions[0].Reduced),
@@ -309,6 +310,26 @@ func processHouse(house FotocasaHouse, stastus string) error {
 		Rooms:       rooms,
 		Bathrooms:   bathrooms,
 		// Picture:
+	}
+
+	sendHouse := true
+	if filters.MaximumPrice != 0 && tmpHouse.Price > filters.MaximumPrice {
+		sendHouse = false
+	}
+	if filters.MinimumPrice != 0 && tmpHouse.Price < filters.MinimumPrice {
+		sendHouse = false
+	}
+	if filters.MaximumRooms != 0 && tmpHouse.Rooms > filters.MaximumRooms {
+		sendHouse = false
+	}
+	if filters.MinimumRooms != 0 && tmpHouse.Rooms < filters.MinimumRooms {
+		sendHouse = false
+	}
+	if filters.MinimumBathrooms != 0 && tmpHouse.Bathrooms < filters.MinimumBathrooms {
+		sendHouse = false
+	}
+	if sendHouse {
+		HouseChan <- &tmpHouse
 	}
 
 	return nil

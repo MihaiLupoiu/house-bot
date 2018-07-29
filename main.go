@@ -15,14 +15,12 @@ import (
 
 func main() {
 
-	util.InitLog("[ house-bot ]: ", true)
-
 	// GET configuration
-	// TODO: Add environment option for telegram BotID and ChatID for Dockerfile.
-	// TODO: Add option send telegram messages messages or not. ( For populating DB)
 	configFilePath := flag.String("configFile", "./config.json", "JSON config file to read.")
 	flag.Parse()
 	config := util.GetConfigurationFile(*configFilePath)
+
+	util.InitLog("[ house-bot ]: ", config.Debug)
 
 	// initialize Database
 	db, err := bolt.Open(config.Database, 0644, bolt.DefaultOptions)
