@@ -8,7 +8,7 @@ COPY . ./
 RUN dep ensure
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix nocgo -o /house-bot .
 
-FROM alpine:latest
+FROM alpine:3.15
 RUN apk update && apk upgrade
 RUN apk add --no-cache ca-certificates netcat-openbsd
 
